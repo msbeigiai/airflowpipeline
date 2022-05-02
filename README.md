@@ -13,5 +13,6 @@ after running docker container *api* service and *airflow* services run simultan
 **Note**: Table in database in named *test_table*. Be careful to change it with you appropriate name.
 Before running `dag01` you should make *database connection* from [Airflow UI](https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html).
 
+Custom dags should be copied to *dag* folder after Airflow instantiation.
 
 
