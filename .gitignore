@@ -1,2 +1,6 @@
 temp/
+dags/
+logs/
+plugins/
+
 .idea

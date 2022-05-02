@@ -10,7 +10,7 @@ import requests
 
 
 dag = DAG(
-    dag_id="dag_test_02",
+    dag_id="dag01",
     start_date=airflow.utils.dates.days_ago(1),
     schedule_interval="@hourly",
     template_searchpath="/tmp"
@@ -74,7 +74,7 @@ titleviews = PythonOperator(
 
 write_to_postgres = PostgresOperator(
     task_id="write_to_postgres",
-    postgres_conn_id='postgres_conn',
+    postgres_conn_id='postgres_conn_01',
     sql="query.sql",
     dag=dag,
 )
