@@ -1,7 +1,6 @@
 # Data pipelines with Apache AirFlow
-***
 
-## This repository helps data engineers familiar with data pipelines.
+## This repository helps data engineers get familiar with data pipelines.
 
 ### Usage
 Just start a postgres instance in [Postgres official docker page](https://hub.docker.com/_/postgres) or locally run it in your machine.
