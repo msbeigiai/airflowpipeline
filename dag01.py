@@ -1,8 +1,11 @@
+from asyncio import tasks
+from http.client import PROXY_AUTHENTICATION_REQUIRED
 import json
 import airflow
-from airflow.operators.python import PythonOperator
+from airflow.operators.python import PythonOperator, BranchPythonOperator
 from airflow.operators.dummy import DummyOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.exceptions import AirflowSkipException
 from airflow import DAG
 import airflow.utils.dates
 import requests
@@ -18,6 +21,75 @@ dag = DAG(
 
 start = DummyOperator(
     task_id='Start',
+    dag=dag,
+)
+
+def _pick_what_company(company):
+    if company == 'Google':
+        return google_operator
+    else:
+        return save_data
+        
+
+pick_what_company = BranchPythonOperator(
+    task_id="pick_google_company",
+    python_callable=_pick_what_company,
+    dag=dag,
+)
+
+def _save_google_data(output_path, year, month, day, hour):
+    url = "http://172.17.0.1:5000"
+    res = requests.get(url)
+    json_obj = json.dumps(res.json(), indent=3)
+    google = json_obj["Companies"]["Google"]
+    if google is None:
+        raise AirflowSkipException
+    else:
+        with open(f"{output_path}_{year}_{month}_{day}_{hour}_GOOGLE.json", "w") as f:
+            google = json_obj["Compnaies"]["Google"]
+            f.write(google)
+
+google_operator = DummyOperator(
+    task_id="google_operator",
+    dag=dag,
+)
+
+save_google_data = PythonOperator(
+    task_id="save_google_data",
+    op_kwargs={
+        "year": "{{ execution_date.year }}",
+        "month": "{{ execution_date.month }}",
+        "day": "{{ execution_date.day }}",
+        "hour": "{{ execution_date.hour }}",
+        "output_path": "/tmp",
+    },
+    dag=dag,
+)
+
+def _fetch_google_data(output_path, company):
+    results = dict.fromkeys(company, 0)
+    with open(f"{output_path}.json", "r") as f:
+        data = json.load(f)
+        for line in data["Companies"]:
+            google = line
+            if google in company:
+                results[google] = data["Companies"][google]["title"]
+
+    with open("/tmp/query_google.sql", "w") as f:
+        for company, title in results.items():
+            f.write(
+                "INSERT INTO test_table VALUES ("
+                    f"'{company}', {title}"
+                ");\n"
+        )
+
+fetch_google_data = PythonOperator(
+    task_id = "fetch_google_data",
+    python_callable=_fetch_google_data,
+    op_kwargs={
+        "company": {"Google"},
+        "output_path": "/tmp/{{ execution_date.year }}_{{ execution_date.month }}_{{ execution_date.day }}_{{ execution_date.hour }}_GOOGLE",
+    },
     dag=dag,
 )
 
@@ -80,4 +152,7 @@ write_to_postgres = PostgresOperator(
 )
 
 
-start >> save_data >> titleviews >> write_to_postgres
+start >> google_operator
+google_operator >> [save_data, save_google_data]
+save_google_data >> fetch_google_data
+save_data >> titleviews >> write_to_postgres
