@@ -2,6 +2,7 @@ from asyncio import tasks
 from errno import ERESTART
 from http.client import PROXY_AUTHENTICATION_REQUIRED
 import json
+from os import remove
 import airflow
 from airflow.operators.python import PythonOperator, BranchPythonOperator
 from airflow.operators.dummy import DummyOperator
@@ -42,17 +43,21 @@ pick_what_company = BranchPythonOperator(
 )
 
 def _save_google_data(output_path, year, month, day, hour):
+     
     url = "http://172.17.0.1:5000"
     res = requests.get(url)
-    json_obj = json.dumps(res.json(), indent=3)
-    # google = json_obj["Companies"]["Google"]
-    google = res.json()["Companies"]["Google"]
-    if google is None:
+    data = res.json()
+    remove_entities = [key for key in data["Companies"]]
+    for k in remove_entities:
+        if k == "Google":
+            continue
+        data["Companies"].pop(k)
+    
+    if data["Companies"] is None:
         raise AirflowSkipException
     else:
         with open(f"{output_path}/{year}_{month}_{day}_{hour}_GOOGLE.json", "w") as f:
-            google = json.dumps(google, indent=2)
-            f.write(google)
+            f.write(json.dumps(data))
 
 # google_operator = DummyOperator(
 #     task_id="google_operator",
