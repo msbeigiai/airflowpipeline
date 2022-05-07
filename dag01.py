@@ -1,4 +1,5 @@
 from asyncio import tasks
+from errno import ERESTART
 from http.client import PROXY_AUTHENTICATION_REQUIRED
 import json
 import airflow
@@ -24,11 +25,14 @@ start = DummyOperator(
     dag=dag,
 )
 
-def _pick_what_company(company):
-    if company == 'Google':
-        return google_operator
-    else:
-        return save_data
+def _pick_what_company():
+    url = "http://172.17.0.1:5000"
+    res = requests.get(url)
+    for company in res.json()["Companies"]:
+        if company == "Google":
+            return "save_google_data"
+        else:
+            return "save_data"
         
 
 pick_what_company = BranchPythonOperator(
@@ -41,21 +45,23 @@ def _save_google_data(output_path, year, month, day, hour):
     url = "http://172.17.0.1:5000"
     res = requests.get(url)
     json_obj = json.dumps(res.json(), indent=3)
-    google = json_obj["Companies"]["Google"]
+    # google = json_obj["Companies"]["Google"]
+    google = res.json()["Companies"]["Google"]
     if google is None:
         raise AirflowSkipException
     else:
-        with open(f"{output_path}_{year}_{month}_{day}_{hour}_GOOGLE.json", "w") as f:
-            google = json_obj["Compnaies"]["Google"]
+        with open(f"{output_path}/{year}_{month}_{day}_{hour}_GOOGLE.json", "w") as f:
+            google = json.dumps(google, indent=2)
             f.write(google)
 
-google_operator = DummyOperator(
-    task_id="google_operator",
-    dag=dag,
-)
+# google_operator = DummyOperator(
+#     task_id="google_operator",
+#     dag=dag,
+# )
 
 save_google_data = PythonOperator(
     task_id="save_google_data",
+    python_callable=_save_google_data,
     op_kwargs={
         "year": "{{ execution_date.year }}",
         "month": "{{ execution_date.month }}",
@@ -76,10 +82,10 @@ def _fetch_google_data(output_path, company):
                 results[google] = data["Companies"][google]["title"]
 
     with open("/tmp/query_google.sql", "w") as f:
-        for company, title in results.items():
+        for google, title in results.items():
             f.write(
-                "INSERT INTO test_table VALUES ("
-                    f"'{company}', {title}"
+                "INSERT INTO google_table VALUES ("
+                    f"'{google}', {title}"
                 ");\n"
         )
 
@@ -151,8 +157,15 @@ write_to_postgres = PostgresOperator(
     dag=dag,
 )
 
+write_google_to_postgres = PostgresOperator(
+    task_id="write_google_postgres",
+    postgres_conn_id='postgres_conn_01',
+    sql='query_google.sql',
+    dag=dag,
+)
 
-start >> google_operator
-google_operator >> [save_data, save_google_data]
-save_google_data >> fetch_google_data
+
+start >> pick_what_company
+pick_what_company >> [save_data, save_google_data]
+save_google_data >> fetch_google_data >> write_google_to_postgres
 save_data >> titleviews >> write_to_postgres
