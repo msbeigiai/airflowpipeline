@@ -1,16 +1,14 @@
-from asyncio import tasks
-from errno import ERESTART
-from http.client import PROXY_AUTHENTICATION_REQUIRED
 import json
-from os import remove
 import airflow
 from airflow.operators.python import PythonOperator, BranchPythonOperator
+from airflow.sensors.python import PythonSensor
 from airflow.operators.dummy import DummyOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.exceptions import AirflowSkipException
 from airflow import DAG
 import airflow.utils.dates
 import requests
+from pathlib import Path
 
 
 
@@ -26,10 +24,27 @@ start = DummyOperator(
     dag=dag,
 )
 
+# def _wait_for_google(year, month, day, hour):
+#     google_path = Path("/tmp/" + f"{year}_{month}_{day}_{hour}_GOOGLE")
+
+
+# wait_for_google = PythonSensor(
+#     task_id="wait_for_google",
+#     python_callable=_wait_for_google,
+#     op_kwargs={
+#         "year": "{{ execution_date.year }}",
+#         "month": "{{ execution_date.month }}",
+#         "day": "{{ execution_date.day }}",
+#         "hour": "{{ execution_date.hour }}",
+#     },
+#     dag=dag,
+# )
+
 def _pick_what_company():
     url = "http://172.17.0.1:5000"
     res = requests.get(url)
-    for company in res.json()["Companies"]:
+    data = res.json()["Companies"]
+    for company in data:
         if company == "Google":
             return "save_google_data"
         else:
@@ -149,7 +164,7 @@ titleviews = PythonOperator(
     task_id="titleviews",
     python_callable=_fetch_titleviews,
     op_kwargs={
-        "companies": {"Apple", "Facebook", "Google"},
+        "companies": {"Apple", "Facebook", "Tesla"},
         "output_path": "/tmp/{{ execution_date.year }}_{{ execution_date.month }}_{{ execution_date.day }}_{{ execution_date.hour }}",
     },
     dag=dag,
